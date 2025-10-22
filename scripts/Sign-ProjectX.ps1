@@ -1,0 +1,1 @@
+.\Sign-RevitLogger.ps1 -ForceRecreatePfx
