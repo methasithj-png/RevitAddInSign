@@ -3,7 +3,7 @@ param(
     [string]$PfxPath = "C:\ProjectX-CodeSign.pfx",
     [string]$PfxPassword = "Meinh@rdt1234!",
     [string]$TimestampUrl = "http://timestamp.digicert.com",
-    [string]$BaseDir = "C:\Users\methasith\source\repos\RevitLogger\RevitLogger",
+    [string]$BaseDir,
     [string[]]$Versions = @('Revit2023','Revit2024','Revit2025','Revit2026'),
     [string]$DllName = "ProjectX.dll",
     [switch]$ForceRecreatePfx
@@ -11,6 +11,20 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+if ([string]::IsNullOrWhiteSpace($BaseDir)) {
+    Add-Type -AssemblyName System.Windows.Forms
+    $fbd = New-Object System.Windows.Forms.FolderBrowserDialog
+    $fbd.Description = "Select the Base Directory (containing bin folder)"
+    $fbd.ShowNewFolderButton = $false
+    
+    if ($fbd.ShowDialog() -eq 'OK') {
+        $BaseDir = $fbd.SelectedPath
+    } else {
+        Write-Error "No directory selected. Operation cancelled."
+        exit 1
+    }
+}
 
 # --- Self-signed certificate creation & trust for current user ---
 $certSubject = "CN=ProjectX Code Signing"
@@ -28,7 +42,7 @@ try {
 
     # Import the PFX into CurrentUser\My (Import-PfxCertificate returns cert object(s))
     Write-Host "Importing PFX into Cert:\CurrentUser\My..." -ForegroundColor Cyan
-    $imported = Import-PfxCertificate -FilePath $PfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword -Exportable -ErrorAction Stop
+    $imported = Import-PfxCertificate -FilePath $PfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword -Exportable -ErrorAction Stop       
     if (-not $imported) { throw "Failed to import PFX into CurrentUser store." }
     if ($imported -is [System.Array]) { $cert = $imported[0] } else { $cert = $imported }
 
@@ -44,7 +58,7 @@ try {
         )
         try {
             $storeLocation = [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
-            if ($StoreLocationStr -ieq 'LocalMachine') { $storeLocation = [System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine }
+            if ($StoreLocationStr -ieq 'LocalMachine') { $storeLocation = [System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine }        
 
             $store = New-Object System.Security.Cryptography.X509Certificates.X509Store($StoreName, $storeLocation)
             $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
@@ -70,7 +84,6 @@ try {
 
     # Determine if running elevated
     $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-
     if ($isAdmin) {
         # If elevated, also add to LocalMachine stores
         foreach ($dest in @('LocalMachine\TrustedPublisher','LocalMachine\Root')) {
